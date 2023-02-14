@@ -69,6 +69,7 @@ public class RabbitMQClientImpl implements RabbitMQClient, ShutdownListener {
   private long channelInstance;
   private boolean channelConfirms = false;
   private boolean hasConnected = false;
+  private Integer prefetchCount;
   private AtomicBoolean isReconnecting = new AtomicBoolean(false);
   private List<Handler<Promise<Void>>> connectionEstablishedCallbacks = new ArrayList<>();
 
@@ -476,6 +477,9 @@ public class RabbitMQClientImpl implements RabbitMQClient, ShutdownListener {
   public Future<Void> basicQos(int prefetchSize, int prefetchCount, boolean global) {
     return forChannel(channel -> {
       channel.basicQos(prefetchSize, prefetchCount, global);
+
+      this.prefetchCount = prefetchCount;
+
       return null;
     });
   }
@@ -818,6 +822,9 @@ public class RabbitMQClientImpl implements RabbitMQClient, ShutdownListener {
         ++channelInstance;
         channel = connection.createChannel();
 
+        if (prefetchCount != null)
+          channel.basicQos(0, prefetchCount, false);
+
         if (channelConfirms)
           channel.confirmSelect();
       } catch (IOException e) {
@@ -841,6 +848,10 @@ public class RabbitMQClientImpl implements RabbitMQClient, ShutdownListener {
     connection.addShutdownListener(this);
     ++channelInstance;
     channel = connection.createChannel();
+
+    if (prefetchCount != null)
+      channel.basicQos(0, prefetchCount, false);
+
     Promise promise = Promise.promise();
     if (connectionEstablishedCallbacks.isEmpty()) {
       promise.complete();
